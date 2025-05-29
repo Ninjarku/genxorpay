@@ -49,6 +49,22 @@ This will:
 > ⚠️ **Ethical Use Only:** This tool is intended for use in environments where you have explicit permission. Unauthorized use is illegal and unethical.
 
 # TODO
+### (Future To-Do)
+- -e encoder and --iterations support for msfvenom
+
+- Add --format or --binary override
+
+- Add --test mode to auto-run payload in sandbox
+
+- Add optional --encode-only mode for custom shellcode
+
+- Handle msfvenom failure with --debug output
+
+- Add integrity check of output bytes (e.g., checksum)
+
+- Include SHA256 of output payloads in log (For hash checks on AV)
+
+- Add --staged, --stageless, or --arch=x86/x64 options
 
 ### 🤝 Contributions
 Contributions, ideas, and pull requests are welcome. Please file an issue if you discover a bug or want to propose a feature.

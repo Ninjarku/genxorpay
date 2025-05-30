@@ -21,6 +21,9 @@
 git clone https://github.com/yourname/genxorpay.git
 cd genxorpay
 chmod +x genxorpay.sh
+
+# To use copy to clipboard features you will need to install xclip if you have not already done so
+sudo apt install xclip 
 ```
 
 ---

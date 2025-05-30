@@ -129,11 +129,18 @@ command -v msfvenom >/dev/null || { echo "[-] msfvenom not found."; exit 1; }
 # Clipboard
 if command -v xclip &>/dev/null; then
     CLIPCMD="xclip -selection clipboard"
+elif command -v xsel &>/dev/null; then
+    CLIPCMD="xsel --clipboard --input"
 elif command -v pbcopy &>/dev/null; then
     CLIPCMD="pbcopy"
 elif command -v wl-copy &>/dev/null; then
     CLIPCMD="wl-copy"
+elif command -v clip.exe &>/dev/null; then
+    CLIPCMD="clip.exe"
+elif [[ -x /mnt/c/Windows/System32/clip.exe ]]; then
+    CLIPCMD="/mnt/c/Windows/System32/clip.exe"
 else
+    echo "[!] No supported clipboard tool found. Output will be printed instead." | tee -a "$LOGFILE"
     CLIPCMD="cat"
 fi
 

